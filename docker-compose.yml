@@ -1,16 +1,116 @@
-version: '3'
-services:
-  web:
-    image: givup
-    build: .  # Add build context
-    ports:
-      - "11000:3000"
-    restart: always
-    volumes:
-      - .:/app  # Optional: for live code updates
-      - node_modules:/app/node_modules
-    environment:
-      - NODE_ENV=production
+name: Deploy to VPS
+on:
+  push:
+    branches:
+      - main
 
-volumes:
-  node_modules:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      
+      - name: Network Diagnostics
+        run: |
+          echo "Performing network diagnostics..."
+          ping -c 4 91.108.105.98 || true
+          traceroute 91.108.105.98 || true
+          nc -zv 91.108.105.98 22 || true
+      
+      - name: Update System Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get upgrade -y
+      
+      - name: Install Docker
+        run: |
+          # Remove existing Docker installations
+          sudo apt-get remove -y docker docker-engine docker.io containerd runc
+          
+          # Install required packages
+          sudo apt-get update
+          sudo apt-get install -y \
+            apt-transport-https \
+            ca-certificates \
+            curl \
+            gnupg \
+            lsb-release
+          
+          # Add Docker's official GPG key
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+          
+          # Set up the stable repository
+          echo \
+            "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+            $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          
+          # Install Docker Engine
+          sudo apt-get update
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+          
+          # Verify Docker installation
+          sudo docker --version
+      
+      - name: Build Docker Image
+        run: |
+          docker build -t givup:latest .
+      
+      - name: Deploy to VPS
+        env:
+          SSH_HOST: 91.108.105.98
+        run: |
+          ssh -v \
+            -o StrictHostKeyChecking=no \
+            root@$SSH_HOST << 'EOF'
+            # Navigate to project directory
+            cd /home/root/givup || (
+              git clone https://github.com/Ibrahim-Sikder/Givup.git /home/root/givup && 
+              cd /home/root/givup
+            )
+            
+            # Pull latest changes
+            git pull origin main
+            
+            # Ensure Docker is installed on VPS
+            which docker || (
+              curl -fsSL https://get.docker.com -o get-docker.sh &&
+              sh get-docker.sh
+            )
+            
+            # Stop existing containers
+            docker-compose down || true
+            
+            # Pull latest images
+            docker-compose pull
+            
+            # Start services
+            docker-compose up -d
+            
+            # Cleanup old images
+            docker image prune -f
+          EOF
+      
+      - name: Deployment Confirmation
+        env:
+          SSH_HOST: 91.108.105.98
+        run: |
+          ssh -o StrictHostKeyChecking=no root@$SSH_HOST "
+            docker ps
+            docker-compose ps
+          "
+      
+      - name: Slack Notification
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
