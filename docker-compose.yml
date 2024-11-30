@@ -2,6 +2,15 @@ version: '3'
 services:
   web:
     image: givup
+    build: .  # Add build context
     ports:
-      - "11000:3000"  # Exposing internal port 3000 on external port 11000
+      - "11000:3000"
     restart: always
+    volumes:
+      - .:/app  # Optional: for live code updates
+      - node_modules:/app/node_modules
+    environment:
+      - NODE_ENV=production
+
+volumes:
+  node_modules:

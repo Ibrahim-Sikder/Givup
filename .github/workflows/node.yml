@@ -1,14 +1,12 @@
 name: Deploy to VPS
-
 on:
   push:
     branches:
-      - main  # Trigger deployment on push to the main branch
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -17,6 +15,10 @@ jobs:
         uses: webfactory/ssh-agent@v0.5.3
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Verify SSH Connection
+        run: |
+          ssh -vv -o StrictHostKeyChecking=no root@123.45.67.89 "echo 'SSH Connection Successful'"
 
       - name: Update System Packages
         run: |
@@ -45,3 +47,5 @@ jobs:
           docker-compose down;
           docker-compose up -d
           "
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
