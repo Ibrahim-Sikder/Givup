@@ -39,6 +39,9 @@ jobs:
 
       - name: Deploy to VPS
         run: |
-          ssh -o StrictHostKeyChecking=no user@123.45.67.89 "cd /path/to/your/project && docker-compose down && docker-compose up -d"
-        env:
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          ssh -o StrictHostKeyChecking=no root@123.45.67.89 "
+          cd /home/root/givup || (git clone https://github.com/Ibrahim-Sikder/Givup.git /home/root/givup && cd /home/root/givup);
+          git pull;
+          docker-compose down;
+          docker-compose up -d
+          "
