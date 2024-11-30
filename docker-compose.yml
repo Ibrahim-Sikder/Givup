@@ -3,5 +3,5 @@ services:
   web:
     image: givup
     ports:
-      - "3000:3000"  # Exposing port 3000 inside the container
+      - "11000:3000"  # Exposing internal port 3000 on external port 11000
     restart: always

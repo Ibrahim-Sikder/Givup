@@ -39,6 +39,6 @@ jobs:
 
       - name: Deploy to VPS
         run: |
-          ssh -o StrictHostKeyChecking=no user@your-vps-ip "cd /path/to/your/project && docker-compose down && docker-compose up -d"
+          ssh -o StrictHostKeyChecking=no user@123.45.67.89 "cd /path/to/your/project && docker-compose down && docker-compose up -d"
         env:
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
