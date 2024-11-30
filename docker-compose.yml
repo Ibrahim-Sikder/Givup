@@ -1,0 +1,7 @@
+version: '3'
+services:
+  web:
+    image: givup
+    ports:
+      - "3000:3000"  # Exposing port 3000 inside the container
+    restart: always
