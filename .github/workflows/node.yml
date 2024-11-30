@@ -1,82 +1,44 @@
-name: Deploy Live Chat Frontend
+name: Deploy Givup Next.js app to VPS
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main  # Trigger deployment when pushing to the main branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      # Step 1: Checkout the repository
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v2
 
-      # Step 2: Set up SSH for GitHub Actions
-      - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
-          ssh-keyscan -t rsa ${{ secrets.HOST }} >> ~/.ssh/known_hosts
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
 
-      # Step 3: Test SSH connection
-      - name: Test SSH connection
-        run: |
-          ssh -vvv -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} "echo 'SSH connection successful'"
-
-      # Step 4: Deploy to VPS using SSH
-      - name: Deploy to VPS using SSH
-        uses: appleboy/ssh-action@master
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.PRIVATE_KEY }}
-          port: ${{ secrets.PORT }}
-          timeout: 60s
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build Docker Image
+        run: |
+          docker build -t ibrahimsikder/givup-app .
+
+      - name: Push Docker Image to Docker Hub
+        run: |
+          docker tag ibrahimsikder/givup-app:latest ibrahimsikder/givup-app:latest
+          docker push ibrahimsikder/givup-app:latest
+
+      - name: SSH to VPS and Deploy
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_IP }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            set -e
-            echo "Starting deployment..."
-            
-            # Variables
-            PROJECT_DIR="/var/www/Giveup"
-            NGINX_CONF="/etc/nginx/sites-available/zrf.muissa.com.conf"
-            PROJECT_NGINX_CONF="$PROJECT_DIR/nginx.conf"
-            GIT_URL="https://github.com/Ibrahim-Sikder/Giveup.git"
-            DOMAIN_NAME="zrf.muissa.com"
-            
-            # Ensure project directory exists
-            sudo mkdir -p $PROJECT_DIR
-            sudo chown -R $USER:$USER $PROJECT_DIR
-            
-            cd $PROJECT_DIR
-            
-            # Clone or update repository
-            if [ ! -d ".git" ]; then
-              git clone $GIT_URL .
-            else
-              git fetch --all
-              git reset --hard origin/main
-            fi
-            
-            # Install dependencies and build
-            npm install --legacy-peer-deps
-            npm run build
-            
-            # Update NGINX configuration
-            if [ -f "$PROJECT_NGINX_CONF" ]; then
-              sudo cp "$PROJECT_NGINX_CONF" "$NGINX_CONF"
-              sudo ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
-              sudo nginx -t && sudo systemctl reload nginx
-            fi
-            
-            # Manage PM2 process
-            if pm2 list | grep -q "Giveup"; then
-              pm2 restart Giveup
-            else
-              pm2 start npm --name "Giveup" -- start
-            fi
-            
-            pm2 save
-            echo "Deployment completed successfully!"
+            docker pull ibrahimsikder/givup-app:latest
+            docker stop givup-app || true
+            docker rm givup-app || true
+            docker run -d -p 1100:3000 --name givup-app ibrahimsikder/givup-app:latest
